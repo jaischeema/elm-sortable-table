@@ -1,6 +1,6 @@
 module Main exposing (..)
 
-import Html exposing (Html, Attribute, div, h1, input, p, text)
+import Html exposing (Html, Attribute, div, h1, input, p, text, td)
 import Html.Attributes exposing (checked, style, type_)
 import Html.Events exposing (onClick)
 import Html.Lazy exposing (lazy)
@@ -147,8 +147,16 @@ config =
             , Table.floatColumn "Rating" .rating
             ]
         , customizations =
-            { defaultCustomizations | rowAttrs = toRowAttrs }
+            { defaultCustomizations
+                | rowAttrs = toRowAttrs
+                , expandedRow = Just expandedBody
+            }
         }
+
+
+expandedBody : Sight -> Table.HtmlDetails Msg
+expandedBody { name } =
+    Table.HtmlDetails [] [ td [] [ text name ] ]
 
 
 toRowAttrs : Sight -> List (Attribute Msg)

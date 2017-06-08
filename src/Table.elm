@@ -199,6 +199,7 @@ type alias Customizations data msg =
     , thead : List ( String, Status, Attribute msg ) -> HtmlDetails msg
     , tfoot : Maybe (HtmlDetails msg)
     , tbodyAttrs : List (Attribute msg)
+    , expandedRow : Maybe (data -> HtmlDetails msg)
     , rowAttrs : data -> List (Attribute msg)
     }
 
@@ -222,6 +223,7 @@ defaultCustomizations =
     , thead = simpleThead
     , tfoot = Nothing
     , tbodyAttrs = []
+    , expandedRow = Nothing
     , rowAttrs = simpleRowAttrs
     }
 
@@ -447,27 +449,28 @@ view (Config { toId, toMsg, columns, customizations }) state data =
             customizations.thead (List.map (toHeaderInfo state toMsg) columns)
 
         thead =
-            Html.thead theadDetails.attributes theadDetails.children
+            ( "header", Html.thead theadDetails.attributes theadDetails.children )
 
-        tbody =
-            Keyed.node "tbody" customizations.tbodyAttrs <|
-                List.map (viewRow toId columns customizations.rowAttrs) sortedData
+        tableRows =
+            List.map (viewRow toId columns customizations.rowAttrs customizations.expandedRow) sortedData
 
         withFoot =
             case customizations.tfoot of
                 Nothing ->
-                    tbody :: []
+                    tableRows
 
                 Just { attributes, children } ->
-                    Html.tfoot attributes children :: tbody :: []
-    in
-        Html.table customizations.tableAttrs <|
+                    ( "footer", Html.tfoot attributes children ) :: tableRows
+
+        tableElements =
             case customizations.caption of
                 Nothing ->
                     thead :: withFoot
 
                 Just { attributes, children } ->
-                    Html.caption attributes children :: thead :: withFoot
+                    ( "caption", Html.caption attributes children ) :: thead :: withFoot
+    in
+        Keyed.node "table" customizations.tableAttrs tableElements
 
 
 toHeaderInfo : State -> (State -> msg) -> ColumnData data msg -> ( String, Status, Attribute msg )
@@ -502,16 +505,32 @@ onClick name isReversed toMsg =
             Json.map2 State (Json.succeed name) (Json.succeed isReversed)
 
 
-viewRow : (data -> String) -> List (ColumnData data msg) -> (data -> List (Attribute msg)) -> data -> ( String, Html msg )
-viewRow toId columns toRowAttrs data =
+viewRow : (data -> String) -> List (ColumnData data msg) -> (data -> List (Attribute msg)) -> Maybe (data -> HtmlDetails msg) -> data -> ( String, Html msg )
+viewRow toId columns toRowAttrs expandedRow data =
     ( toId data
-    , lazy3 viewRowHelp columns toRowAttrs data
+    , lazy3 viewRowHelp columns ( toRowAttrs, expandedRow ) data
     )
 
 
-viewRowHelp : List (ColumnData data msg) -> (data -> List (Attribute msg)) -> data -> Html msg
-viewRowHelp columns toRowAttrs data =
-    Html.tr (toRowAttrs data) (List.map (viewCell data) columns)
+viewRowHelp : List (ColumnData data msg) -> ( data -> List (Attribute msg), Maybe (data -> HtmlDetails msg) ) -> data -> Html msg
+viewRowHelp columns ( toRowAttrs, expandedRow ) data =
+    let
+        extraRow =
+            case expandedRow of
+                Nothing ->
+                    Html.tr [] []
+
+                Just detailsFunc ->
+                    let
+                        { attributes, children } =
+                            detailsFunc data
+                    in
+                        Html.tr attributes children
+    in
+        Html.tbody (toRowAttrs data)
+            [ Html.tr [] (List.map (viewCell data) columns)
+            , extraRow
+            ]
 
 
 viewCell : data -> ColumnData data msg -> Html msg
